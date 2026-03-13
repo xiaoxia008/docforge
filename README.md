@@ -1,6 +1,11 @@
-# DocForge
+# DocForge 🔨
 
-PDF/文档智能处理 CLI 工具 —— 一个纯本地运行的 PDF 处理命令行工具，主打隐私安全和易用性。
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Python](https://img.shields.io/badge/python-3.8+-green)
+![License](https://img.shields.io/badge/license-MIT-yellow)
+![GitHub Stars](https://img.shields.io/github/stars/xiaoxia008/docforge)
+
+**纯本地运行的 PDF/文档智能处理 CLI 工具 — 隐私安全，开箱即用**
 
 ## 安装
 

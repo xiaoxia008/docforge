@@ -1,0 +1,8 @@
+Pillow>=9.0
+click>=8.0
+pypdf>=3.0
+reportlab>=4.0
+rich>=12.0
+
+[images]
+pdf2image>=1.16

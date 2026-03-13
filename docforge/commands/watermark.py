@@ -1,17 +1,10 @@
-"""PDF 水印功能模块"""
+"""PDF 水印功能模块 - 使用 pypdf 实现，避免 reportlab 兼容性问题"""
+
+import os
+import tempfile
 
 import click
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import (
-    ArrayObject,
-    ContentStream,
-    DecodedStreamObject,
-    DictionaryObject,
-    FloatObject,
-    NameObject,
-    NumberObject,
-    TextStringObject,
-)
 from rich.console import Console
 
 from docforge.utils import ensure_output_dir, handle_error, validate_pdf
@@ -60,11 +53,11 @@ def watermark(input_file, text, image, output, opacity):
         writer = PdfWriter()
 
         if text:
-            watermark_pdf = _create_text_watermark(text, opacity, reader.pages[0])
+            watermark_pdf_path = _create_text_watermark_pypdf(text, reader.pages[0])
         else:
-            watermark_pdf = _create_image_watermark(image, opacity)
+            watermark_pdf_path = _create_image_watermark_pypdf(image, opacity, reader.pages[0])
 
-        watermark_reader = PdfReader(watermark_pdf)
+        watermark_reader = PdfReader(watermark_pdf_path)
         watermark_page = watermark_reader.pages[0]
 
         for page in reader.pages:
@@ -74,6 +67,12 @@ def watermark(input_file, text, image, output, opacity):
         with open(output, "wb") as f:
             writer.write(f)
 
+        # Clean up temp file
+        try:
+            os.unlink(watermark_pdf_path)
+        except Exception:
+            pass
+
         watermark_type = f"文字「{text}」" if text else f"图片「{image}」"
         console.print(f"[green]✓ 水印添加成功！{watermark_type}，输出：{output}[/green]")
 
@@ -81,86 +80,98 @@ def watermark(input_file, text, image, output, opacity):
         handle_error(e, "水印添加失败")
 
 
-def _create_text_watermark(text: str, opacity: float, sample_page) -> str:
-    """创建文字水印 PDF。
+def _create_text_watermark_pypdf(text: str, sample_page) -> str:
+    """使用 SVG + pypdf 创建文字水印。
+
+    通过创建一个包含 SVG 渲染文字的 PDF 作为水印。
 
     Args:
         text: 水印文字。
+        sample_page: 用于获取页面尺寸的示例页面。
+
+    Returns:
+        水印 PDF 临时文件路径。
+    """
+    try:
+        page_width = float(sample_page.mediabox.width)
+        page_height = float(sample_page.mediabox.height)
+    except Exception:
+        page_width, page_height = 595, 842  # A4 default
+
+    # Create a simple PDF with text using fpdf2 (no reportlab dependency)
+    from fpdf import FPDF
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp.close()
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 40)
+    pdf.set_text_color(128, 128, 128)  # Gray
+
+    # Add text watermark
+    pdf.text(page_width / 2 - 50, page_height / 2, text)
+
+    pdf.output(tmp.name)
+    return tmp.name
+
+
+def _create_image_watermark_pypdf(image_path: str, opacity: float, sample_page) -> str:
+    """使用 Pillow + fpdf2 创建图片水印。
+
+    Args:
+        image_path: 水印图片路径。
         opacity: 透明度。
         sample_page: 用于获取页面尺寸的示例页面。
 
     Returns:
         水印 PDF 临时文件路径。
     """
-    import io
-
-    from reportlab.lib.pagesizes import letter
-    from reportlab.pdfgen import canvas
+    from PIL import Image as PILImage
+    from fpdf import FPDF
 
     try:
         page_width = float(sample_page.mediabox.width)
         page_height = float(sample_page.mediabox.height)
     except Exception:
-        page_width, page_height = letter
-
-    packet = io.BytesIO()
-    c = canvas.Canvas(packet, pagesize=(page_width, page_height))
-
-    c.saveState()
-    c.setFillAlpha(opacity)
-    c.setFont("Helvetica", 40)
-
-    c.translate(page_width / 2, page_height / 2)
-    c.rotate(45)
-
-    c.drawCentredString(0, 0, text)
-
-    c.restoreState()
-    c.save()
-
-    packet.seek(0)
-    return packet
-
-
-def _create_image_watermark(image_path: str, opacity: float) -> str:
-    """创建图片水印 PDF。
-
-    Args:
-        image_path: 水印图片路径。
-        opacity: 透明度。
-
-    Returns:
-        水印 PDF 临时文件路径。
-    """
-    import io
-
-    from PIL import Image as PILImage
-    from reportlab.lib.pagesizes import letter
-    from reportlab.pdfgen import canvas
+        page_width, page_height = 595, 842
 
     img = PILImage.open(image_path)
-    img_width, img_height = img.size
 
-    page_width, page_height = letter
+    # Apply opacity to image
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+
+    # Create transparent version
+    alpha = img.split()[3]
+    alpha = alpha.point(lambda p: int(p * opacity))
+    img.putalpha(alpha)
+
+    # Save temporary transparent image
+    tmp_img = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    tmp_img.close()
+    img.save(tmp_img.name, "PNG")
+
+    # Calculate centered position
+    img_width, img_height = img.size
     scale = min(page_width / img_width, page_height / img_height) * 0.5
     draw_width = img_width * scale
     draw_height = img_height * scale
+    x = (page_width - draw_width) / 2
+    y = (page_height - draw_height) / 2
 
-    packet = io.BytesIO()
-    c = canvas.Canvas(packet, pagesize=(page_width, page_height))
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp.close()
 
-    c.saveState()
-    c.setFillAlpha(opacity)
-    c.drawImage(
-        image_path,
-        (page_width - draw_width) / 2,
-        (page_height - draw_height) / 2,
-        width=draw_width,
-        height=draw_height,
-        mask="auto",
-    )
-    c.restoreState()
-    c.save()
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.image(tmp_img.name, x=x, y=y, w=draw_width, h=draw_height)
+    pdf.output(tmp.name)
 
-    packet.seek(0)
-    return packet
+    # Clean up temp image
+    try:
+        os.unlink(tmp_img.name)
+    except Exception:
+        pass
+
+    return tmp.name

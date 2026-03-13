@@ -31,7 +31,12 @@ def split(input_file, pages, each, output):
         total_pages = len(reader.pages)
 
         if each:
-            output_dir = output if output != "output" else "split_output"
+            # If output ends with / or doesn't end with .pdf, treat as directory
+            if output.endswith("/") or not output.lower().endswith(".pdf"):
+                output_dir = output
+            else:
+                # User gave a file path, use its parent directory
+                output_dir = os.path.dirname(output) or "split_output"
             ensure_output_dir(output_dir)
             base_name = os.path.splitext(os.path.basename(input_file))[0]
 

@@ -9,6 +9,7 @@ from docforge.commands.convert import from_images, to_images
 from docforge.commands.encrypt import decrypt, encrypt
 from docforge.commands.extract import extract
 from docforge.commands.merge import merge
+from docforge.commands.ocr import ocr
 from docforge.commands.split import split
 from docforge.commands.watermark import watermark
 
@@ -34,6 +35,7 @@ cli.add_command(encrypt)
 cli.add_command(decrypt)
 cli.add_command(to_images)
 cli.add_command(from_images)
+cli.add_command(ocr)
 
 
 if __name__ == "__main__":

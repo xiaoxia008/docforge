@@ -21,6 +21,7 @@ setup(
     ],
     extras_require={
         "images": ["pdf2image>=1.16"],
+        "ocr": ["pytesseract>=0.3.10", "pdf2image>=1.16"],
     },
     entry_points={
         "console_scripts": [
